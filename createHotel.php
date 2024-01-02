@@ -5,7 +5,7 @@ header("Content-Type: application/json; charset=UTF-8");
 include 'config.php';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    if (isset($_FILES["image"]) && isset($_POST["name"]) && isset($_POST["description"]) && isset($_POST["price"]) && isset($_POST["location"])) {
+    if (isset($_FILES["image"], $_POST["name"], $_POST["description"], $_POST["price"], $_POST["location"])) {
         $image = $_FILES["image"];
         $name = $_POST["name"];
         $description = $_POST["description"];
@@ -16,9 +16,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $allowedTypes = [IMAGETYPE_JPEG, IMAGETYPE_PNG];
 
         if (!in_array($imageType, $allowedTypes)) {
-            http_response_code(400);
-            echo json_encode(["message" => "Invalid file type"]);
-            exit;
+            respondError("Invalid file type", 400);
         }
 
         $uploadDir = "uploads/";
@@ -26,32 +24,38 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $uploadPath = $uploadDir . $imageName;
 
         if (move_uploaded_file($image["tmp_name"], $uploadPath)) {
-            $conn = connectToDatabase();
+            $filePath = $_SERVER['DOCUMENT_ROOT'] . '/reshotel_api/' . $uploadPath;
 
-            // Store the complete file path in the database
-            $filePath = $_SERVER['DOCUMENT_ROOT'] . '/' . 'reshotel_api' . $uploadPath;
+            $sql = "INSERT INTO hotels (file_name, name, description, price, location, file_path) VALUES (?, ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("ssssss", $imageName, $name, $description, $price, $location, $filePath);
 
-            $sql = "INSERT INTO hotels (file_name, name, description, price, location, file_path) VALUES ('$imageName', '$name', '$description', '$price', $location', '$filePath')";
-
-            if ($conn->query($sql) === TRUE) {
-                echo json_encode(["message" => "Image uploaded and details inserted into the database"]);
-                http_response_code(200);
+            if ($stmt->execute()) {
+                respondSuccess("Image uploaded and details inserted into the database");
             } else {
-                echo json_encode(["message" => "Error inserting data into the database"]);
-                http_response_code(500);
+                respondError("Error inserting data into the database", 500);
             }
 
-            $conn->close();
+            $stmt->close();
         } else {
-            http_response_code(500);
-            echo json_encode(["message" => "Failed to upload image"]);
+            respondError("Failed to upload image", 500);
         }
     } else {
-        http_response_code(400);
-        echo json_encode(["message" => "Invalid request data"]);
+        respondError("Invalid request data", 400);
     }
 } else {
-    http_response_code(405);
-    echo json_encode(["message" => "Method Not Allowed"]);
+    respondError("Method Not Allowed", 405);
+}
+
+function respondSuccess($message) {
+    echo json_encode(["message" => $message]);
+    http_response_code(200);
+    exit;
+}
+
+function respondError($message, $statusCode) {
+    echo json_encode(["message" => $message]);
+    http_response_code($statusCode);
+    exit;
 }
 ?>
