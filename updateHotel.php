@@ -4,69 +4,85 @@ header("Content-Type: application/json; charset=UTF-8");
 
 include 'config.php';
 
-if ($_SERVER["REQUEST_METHOD"] === "PUT") {
-    if (isset($_FILES["image"]) && isset($_POST["id"]) && isset($_POST["name"]) && isset($_POST["description"]) && isset($_POST["price"]) && isset($_POST["location"])) {
-        $image = $_FILES["image"];
-        $id = $_POST["id"];
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    if (isset($_POST["id"], $_POST["name"], $_POST["description"], $_POST["price"], $_POST["location"])) {
+        $hotelId = $_POST["id"];
         $name = $_POST["name"];
         $description = $_POST["description"];
         $price = $_POST["price"];
         $location = $_POST["location"];
+        $existingImage = null;
 
-        if (!empty($image["tmp_name"])) {
+        // Select existing image data
+        $selectSql = "SELECT file_name FROM hotels WHERE id=?";
+        $selectStmt = $conn->prepare($selectSql);
+        $selectStmt->bind_param("i", $hotelId);
+        $selectStmt->execute();
+        $selectStmt->bind_result($existingImage);
+        $selectStmt->fetch();
+        $selectStmt->close();
+
+        if (isset($_FILES["image"])) {
+            $image = $_FILES["image"];
             $imageType = exif_imagetype($image["tmp_name"]);
             $allowedTypes = [IMAGETYPE_JPEG, IMAGETYPE_PNG];
 
             if (!in_array($imageType, $allowedTypes)) {
-                http_response_code(400);
-                echo json_encode(["message" => "Invalid file type"]);
-                exit;
+                respondError("Invalid file type", 400);
             }
 
             $uploadDir = "uploads/";
             $imageName = uniqid() . '_' . $image["name"];
             $uploadPath = $uploadDir . $imageName;
 
-            if (!move_uploaded_file($image["tmp_name"], $uploadPath)) {
-                http_response_code(500);
-                echo json_encode(["message" => "Failed to upload image"]);
-                exit;
-            }
-
-            // Delete the existing image file if it exists
-            $conn = connectToDatabase();
-            $sqlSelect = "SELECT file_path FROM hotels WHERE id = '$id'";
-            $result = $conn->query($sqlSelect);
-
-            if ($result->num_rows > 0) {
-                $row = $result->fetch_assoc();
-                $existingFilePath = $row["file_path"];
-                if (file_exists($existingFilePath)) {
-                    unlink($existingFilePath);
+            if (move_uploaded_file($image["tmp_name"], $uploadPath)) {
+                if ($existingImage !== null) {
+                    $oldImagePath = $_SERVER['DOCUMENT_ROOT'] . '/reshotel_api/uploads/' . $existingImage;
+                    if (file_exists($oldImagePath)) {
+                        unlink($oldImagePath);
+                    }
                 }
+                $existingImage = $imageName;
+            } else {
+                respondError("Failed to upload image", 500);
             }
         }
 
-        $conn = connectToDatabase();
+        $sql = "UPDATE hotels SET name=?, description=?, price=?, location=?";
+        $params = [$name, $description, $price, $location];
 
-        $updateImagePart = (!empty($image["tmp_name"])) ? ", file_name = '$imageName', file_path = '$uploadPath'" : "";
-        $sql = "UPDATE hotels SET name = '$name', description = '$description', price = '$price', location = '$location' $updateImagePart WHERE id = '$id'";
-
-        if ($conn->query($sql) === TRUE) {
-            http_response_code(200);
-            echo json_encode(["message" => "Record updated successfully"]);
-        } else {
-            http_response_code(500);
-            echo json_encode(["message" => "Error updating data in the database"]);
+        if ($existingImage !== null) {
+            $sql .= ", file_name=?, file_path=?";
+            $params[] = $existingImage;
+            $params[] = $_SERVER['DOCUMENT_ROOT'] . '/reshotel_api/' . $uploadPath;
         }
 
-        $conn->close();
+        $sql .= " WHERE id=?";
+        $params[] = $hotelId;
+
+        $stmt = $conn->prepare($sql);
+        $types = str_repeat('s', count($params));
+        $stmt->bind_param($types, ...$params);
+
+        if ($stmt->execute()) {
+            echo json_encode(["message" => "Hotel details updated" . ($existingImage !== null ? " with new image" : "")]);
+            http_response_code(200);
+            exit;
+        } else {
+            echo json_encode(["message" => "Error updating data in the database"]);
+            http_response_code(500);
+            exit;
+        }
+
+        $stmt->close();
     } else {
-        http_response_code(400);
         echo json_encode(["message" => "Invalid request data"]);
+        http_response_code(400);
+        exit;
     }
 } else {
-    http_response_code(405);
     echo json_encode(["message" => "Method Not Allowed"]);
+    http_response_code(405);
+    exit;
 }
 ?>

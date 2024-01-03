@@ -5,27 +5,37 @@ header("Content-Type: application/json; charset=UTF-8");
 include 'config.php';
 
 if ($_SERVER["REQUEST_METHOD"] === "DELETE") {
-    if (isset($_POST["id"])) {
-        $id = $_POST["id"];
+    $data = json_decode(file_get_contents("php://input"));
+
+    if (isset($data->id)) {
+        $id = $data->id;
 
         $conn = connectToDatabase();
 
-        $uploadDir = "uploads/";
-        $filePath = $uploadDir . $fileName;
+        $sql = "SELECT file_name FROM hotels WHERE id = '$id'";
+        $result = $conn->query($sql);
 
-        if (unlink($filePath)) {
-            $sql = "DELETE FROM hotels WHERE id = '$id'";
+        if ($result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $fileName = $row["file_name"];
+            $filePath = "uploads/" . $fileName;
 
-            if ($conn->query($sql) === TRUE) {
-                echo json_encode(["message" => "Image deleted successfully"]);
-                http_response_code(200);
+            if (unlink($filePath)) {
+                $sqlDelete = "DELETE FROM hotels WHERE id = '$id'";
+                if ($conn->query($sqlDelete) === TRUE) {
+                    echo json_encode(["message" => "Hotel deleted successfully"]);
+                    http_response_code(200);
+                } else {
+                    echo json_encode(["message" => "Error deleting hotel from the database"]);
+                    http_response_code(500);
+                }
             } else {
-                echo json_encode(["message" => "Error deleting image from the database"]);
+                echo json_encode(["message" => "Error deleting image from the server"]);
                 http_response_code(500);
             }
         } else {
-            echo json_encode(["message" => "Error deleting image from the server"]);
-            http_response_code(500);
+            echo json_encode(["message" => "Hotel not found"]);
+            http_response_code(404);
         }
 
         $conn->close();
