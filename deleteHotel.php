@@ -2,49 +2,64 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-include 'config.php';
+include('config.php');
 
-if ($_SERVER["REQUEST_METHOD"] === "DELETE") {
-    $data = json_decode(file_get_contents("php://input"));
+// Get input data from Flutter
+$input_data = json_decode(file_get_contents('php://input'), true);
 
-    if (isset($data->id)) {
-        $id = $data->id;
+// Check if the 'id' parameter is provided
+if (isset($input_data['id'])) {
+    $hotel_id = $input_data['id'];
 
-        $conn = connectToDatabase();
+    // Select file path from the database before deleting the hotel
+    $select_query = "SELECT file_path FROM hotels WHERE id = $hotel_id";
+    $result = mysqli_query($conn, $select_query);
 
-        $sql = "SELECT file_name FROM hotels WHERE id = '$id'";
-        $result = $conn->query($sql);
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
+        $file_path = $row['file_path'];
 
-        if ($result->num_rows > 0) {
-            $row = $result->fetch_assoc();
-            $fileName = $row["file_name"];
-            $filePath = "uploads/" . $fileName;
+        // Delete hotel from the database
+        $delete_query = "DELETE FROM hotels WHERE id = $hotel_id";
 
-            if (unlink($filePath)) {
-                $sqlDelete = "DELETE FROM hotels WHERE id = '$id'";
-                if ($conn->query($sqlDelete) === TRUE) {
-                    echo json_encode(["message" => "Hotel deleted successfully"]);
-                    http_response_code(200);
-                } else {
-                    echo json_encode(["message" => "Error deleting hotel from the database"]);
-                    http_response_code(500);
-                }
-            } else {
-                echo json_encode(["message" => "Error deleting image from the server"]);
-                http_response_code(500);
+        if (mysqli_query($conn, $delete_query)) {
+            // Hotel deleted successfully
+
+            // Remove the image file from the system
+            if (file_exists($file_path)) {
+                unlink($file_path);
             }
-        } else {
-            echo json_encode(["message" => "Hotel not found"]);
-            http_response_code(404);
-        }
 
-        $conn->close();
+            $response = array(
+                'status' => 'success',
+                'message' => 'Hotel deleted successfully.'
+            );
+            echo json_encode($response);
+        } else {
+            // Error in deleting hotel
+            $response = array(
+                'status' => 'error',
+                'message' => 'Failed to delete hotel. ' . mysqli_error($conn)
+            );
+            echo json_encode($response);
+        }
     } else {
-        http_response_code(400);
-        echo json_encode(["message" => "Invalid request data"]);
+        // No matching record found
+        $response = array(
+            'status' => 'error',
+            'message' => 'Hotel not found.'
+        );
+        echo json_encode($response);
     }
 } else {
-    http_response_code(405);
-    echo json_encode(["message" => "Method Not Allowed"]);
+    // 'id' parameter not provided
+    $response = array(
+        'status' => 'error',
+        'message' => 'Hotel ID not provided.'
+    );
+    echo json_encode($response);
 }
+
+// Close database connection
+mysqli_close($conn);
 ?>
