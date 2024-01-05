@@ -4,9 +4,9 @@ require_once 'config.php';
 
 $data = json_decode(file_get_contents('php://input'), true);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = $_POST['name'];
-    $username = $_POST['username'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $name = $data['name'];
+    $username = $data['username'];
+    $password = password_hash($data['password'], PASSWORD_DEFAULT);
     $role = 'User';
 
     $sql = "INSERT INTO users (name, username, password, role) VALUES ('$name', '$username', '$password', '$role')";

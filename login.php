@@ -24,7 +24,7 @@ if (isset($data['username']) && isset($data['password'])) {
             $key = "koderahasia"; // Replace with your secret key
             $token = JWT::encode(['user_id' => $user['id']], $key, 'HS256');
 
-            $response = array('status' => 'success', 'message' => 'Login successful', 'token' => $token);
+            $response = array('status' => 'success', 'message' => 'Login successful', 'token' => $token, 'role' =>  $user['role']);
         }
     } else {
         // Authentication failed
